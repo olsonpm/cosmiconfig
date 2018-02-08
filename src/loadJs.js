@@ -6,15 +6,15 @@ const readFile = require('./readFile');
 
 module.exports = function loadJs(
   filepath: string,
-  options: { sync?: boolean }
+  options: { ignoreEmpty: boolean, sync?: boolean }
 ): Promise<?cosmiconfig$Result> | ?cosmiconfig$Result {
   function parseJsFile(content: ?string): ?cosmiconfig$Result {
-    if (!content) return null;
+    const isEmpty = content === '';
+    if (content == null || (isEmpty && options.ignoreEmpty)) return null;
 
-    return {
-      config: requireFromString(content, filepath),
-      filepath,
-    };
+    return isEmpty
+      ? { config: undefined, filepath, isEmpty }
+      : { config: requireFromString(content, filepath), filepath };
   }
 
   return !options.sync

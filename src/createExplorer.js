@@ -51,16 +51,31 @@ module.exports = function createExplorer(options: {
   }
 
   function search(
-    searchPath: string
+    searchPath: string,
+    searchOptions: {
+      ignoreEmpty?: boolean,
+    }
   ): Promise<?cosmiconfig$Result> | ?cosmiconfig$Result {
+    const sanitizedSearchOptions: {
+      ignoreEmpty: boolean,
+    } = Object.assign(
+      {},
+      {
+        ignoreEmpty: true,
+      },
+      searchOptions
+    );
+
     if (!searchPath) searchPath = process.cwd();
 
     const absoluteSearchPath = path.resolve(process.cwd(), searchPath);
     const searchPathDir = getDirectory(absoluteSearchPath, options.sync);
 
     return searchPathDir instanceof Promise
-      ? searchPathDir.then(searchDirectory)
-      : searchDirectory(searchPathDir);
+      ? searchPathDir.then(pathDir =>
+          searchDirectory(pathDir, sanitizedSearchOptions)
+        )
+      : searchDirectory(searchPathDir, sanitizedSearchOptions);
   }
 
   function load(
@@ -115,7 +130,10 @@ module.exports = function createExplorer(options: {
   }
 
   function searchDirectory(
-    directory: string
+    directory: string,
+    searchOptions: {
+      ignoreEmpty: boolean,
+    }
   ): Promise<?cosmiconfig$Result> | ?cosmiconfig$Result {
     if (searchCache && searchCache.has(directory)) {
       return searchCache.get(directory);
@@ -132,6 +150,7 @@ module.exports = function createExplorer(options: {
       result => {
         if (result || !options.rc) return result;
         return loadRc(path.join(directory, options.rc), {
+          ignoreEmpty: searchOptions.ignoreEmpty,
           sync: options.sync,
           rcStrictJson: options.rcStrictJson,
           rcExtensions: options.rcExtensions,
@@ -139,7 +158,10 @@ module.exports = function createExplorer(options: {
       },
       result => {
         if (result || !options.js) return result;
-        return loadJs(path.join(directory, options.js), { sync: options.sync });
+        return loadJs(path.join(directory, options.js), {
+          ignoreEmpty: searchOptions.ignoreEmpty,
+          sync: options.sync,
+        });
       },
       result => {
         if (result) return result;
@@ -149,7 +171,7 @@ module.exports = function createExplorer(options: {
         if (nextDirectory === directory || directory === options.stopDir)
           return null;
 
-        return searchDirectory(nextDirectory);
+        return searchDirectory(nextDirectory, searchOptions);
       },
       transform,
     ]);

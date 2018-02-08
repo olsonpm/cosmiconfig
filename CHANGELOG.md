@@ -6,6 +6,10 @@
 
 - Changed: `clearFileCache()` and `clearDirectoryCache()` have been renamed to `clearLoadCache()` and `clearSearchPath()` respectively.
 
+- Changed: `load()` now returns an undefined config and an additional property `isEmpty: true` when loading an empty file.
+
+- Changed: `search()` now takes a second options argument which can be an object containing a single property `ignoreEmpty`.  This defaults to true and tells cosmiconfig whether to continue searching for files when an empty one is found.
+
 ## 4.0.0
 
 - Licensing improvement: updated `parse-json` from `3.0.0` to `4.0.0`(see [sindresorhus/parse-json#12][parse-json-pr-12]).

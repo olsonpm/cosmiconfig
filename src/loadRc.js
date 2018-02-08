@@ -10,6 +10,7 @@ const funcRunner = require('./funcRunner');
 module.exports = function loadRc(
   filepath: string,
   options: {
+    ignoreEmpty: boolean,
     sync?: boolean,
     rcStrictJson?: boolean,
     rcExtensions?: boolean,
@@ -32,72 +33,61 @@ module.exports = function loadRc(
   }
 
   function parseExtensionlessRcFile(content: ?string): ?cosmiconfig$Result {
-    if (!content) return null;
-    const pasedConfig = options.rcStrictJson
+    const isEmpty = content === '';
+    if (content == null || (isEmpty && options.ignoreEmpty)) return null;
+
+    if (isEmpty) {
+      return {
+        config: undefined,
+        filepath,
+        isEmpty,
+      };
+    }
+
+    const parsedConfig = options.rcStrictJson
       ? parseJson(content, filepath)
       : yaml.safeLoad(content, { filename: filepath });
     return {
-      config: pasedConfig,
+      config: parsedConfig,
       filepath,
     };
   }
 
   function loadRcWithExtensions() {
-    let foundConfig = null;
-    return funcRunner(readRcFile('json'), [
-      (jsonContent: ?string) => {
-        // Since this is the first try, config cannot have been found, so don't
-        // check `if (foundConfig)`.
-        if (jsonContent) {
-          const successFilepath = `${filepath}.json`;
-          foundConfig = {
-            config: parseJson(jsonContent, successFilepath),
-            filepath: successFilepath,
-          };
-        } else {
-          return readRcFile('yaml');
-        }
-      },
-      (yamlContent: ?string) => {
-        if (foundConfig) {
-          return;
-        } else if (yamlContent) {
-          const successFilepath = `${filepath}.yaml`;
-          foundConfig = {
-            config: yaml.safeLoad(yamlContent, { filename: successFilepath }),
-            filepath: successFilepath,
-          };
-        } else {
-          return readRcFile('yml');
-        }
-      },
-      (ymlContent: ?string) => {
-        if (foundConfig) {
-          return;
-        } else if (ymlContent) {
-          const successFilepath = `${filepath}.yml`;
-          foundConfig = {
-            config: yaml.safeLoad(ymlContent, { filename: successFilepath }),
-            filepath: successFilepath,
-          };
-        } else {
-          return readRcFile('js');
-        }
-      },
-      (jsContent: ?string) => {
-        if (foundConfig) {
-          return;
-        } else if (jsContent) {
-          const successFilepath = `${filepath}.js`;
-          foundConfig = {
-            config: requireFromString(jsContent, successFilepath),
-            filepath: successFilepath,
-          };
-        } else {
-          return;
-        }
-      },
-      () => foundConfig,
+    function loadExtension(
+      extn: string,
+      parse: (content: string, filename: string) => Object
+    ) {
+      // Check the result from the previous `loadExtension` invocation. If result
+      // isn't null, just return that.
+      return result => {
+        if (result != null) return result;
+
+        // Try to load the rc file for the given extension.
+        return funcRunner(readRcFile(extn), [
+          content => {
+            const isEmpty = content === '';
+            if (content == null || (isEmpty && options.ignoreEmpty)) {
+              return null;
+            }
+
+            const fpath = `${filepath}.${extn}`;
+            return isEmpty
+              ? { config: undefined, filepath: fpath, isEmpty: true }
+              : { config: parse(content, fpath), filepath: fpath };
+          },
+        ]);
+      };
+    }
+
+    const parseYml = (content: string, filename: string) =>
+      yaml.safeLoad(content, { filename });
+
+    return funcRunner(!options.sync ? Promise.resolve() : undefined, [
+      loadExtension('json', parseJson),
+      loadExtension('yaml', parseYml),
+      loadExtension('yml', parseYml),
+      loadExtension('js', requireFromString),
     ]);
   }
 
